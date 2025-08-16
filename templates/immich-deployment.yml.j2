@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-server
+  namespace: {{ immich_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-server
+  template:
+    metadata:
+      labels:
+        app: immich-server
+    spec:
+      initContainers:
+        - name: init-data-folders
+          image: alpine:3
+          command:
+            - sh
+            - -c
+            - >
+              mkdir -p /data/upload &&
+              mkdir -p /data/encoded-video &&
+              mkdir -p /data/thumbs &&
+              mkdir -p /data/backups &&
+              mkdir -p /data/library &&
+              mkdir -p /data/profile &&
+              touch /data/upload/.immich &&
+              touch /data/encoded-video/.immich &&
+              touch /data/thumbs/.immich &&
+              touch /data/backups/.immich &&
+              touch /data/library/.immich &&
+              touch /data/profile/.immich
+          volumeMounts:
+            - name: data-storage
+              mountPath: {{ immich_storage_path }}
+      containers:
+        - name: server
+          image: "{{ immich_server_image }}"
+          ports:
+            - containerPort: {{ immich_server_port }}
+              protocol: TCP
+            - containerPort: {{ immich_api_port }}
+              protocol: TCP
+            - containerPort: 2283
+              protocol: TCP
+          env:
+            - name: IMMICH_SERVER_PORT
+              value: "2283"
+          envFrom:
+            - configMapRef:
+                name: immich-env-config
+          volumeMounts:
+            - name: data-storage
+              mountPath: {{ immich_storage_path }}
+          resources:
+            requests:
+              memory: "{{ immich_server_resources.requests.memory }}"
+              cpu: "{{ immich_server_resources.requests.cpu }}"
+            limits:
+              memory: "{{ immich_server_resources.limits.memory }}"
+              cpu: "{{ immich_server_resources.limits.cpu }}"
+      volumes:
+        - name: data-storage
+          persistentVolumeClaim:
+            claimName: immich-data-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-ml
+  namespace: {{ immich_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-ml
+  template:
+    metadata:
+      labels:
+        app: immich-ml
+    spec:
+      containers:
+        - name: ml
+          image: "{{ immich_machine_learning_image }}"
+          ports:
+            - containerPort: {{ immich_ml_port }}
+              protocol: TCP
+              name: ml-port
+          envFrom:
+            - configMapRef:
+                name: immich-env-config
+
